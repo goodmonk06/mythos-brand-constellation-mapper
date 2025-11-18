@@ -1,0 +1,81 @@
+// Prisma schema for Mythos Brand Constellation Mapper
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Mythic symbols: archetypes, animals, elements, mythic figures, etc.
+model MythicSymbol {
+  id                  String              @id @default(cuid())
+  communityId         String
+  key                 String              // URL-friendly key (e.g., "phoenix", "fire-element")
+  name                String              // Display name
+  descriptionMarkdown String              @db.Text
+  category            SymbolCategory      // Type of symbol
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  // Relations
+  constellationLinks  ConstellationLink[]
+
+  @@unique([communityId, key])
+  @@index([communityId])
+  @@index([category])
+}
+
+enum SymbolCategory {
+  animal
+  element
+  object
+  myth_figure
+  archetype
+  other
+}
+
+// Brand pillars: core values, content pillars, brand attributes
+model BrandPillar {
+  id                  String              @id @default(cuid())
+  communityId         String
+  key                 String              // URL-friendly key (e.g., "innovation", "community-first")
+  name                String              // Display name
+  descriptionMarkdown String              @db.Text
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  // Relations
+  constellationLinks  ConstellationLink[]
+
+  @@unique([communityId, key])
+  @@index([communityId])
+}
+
+// Links between symbols and pillars forming the constellation
+model ConstellationLink {
+  id            String       @id @default(cuid())
+  symbolId      String
+  pillarId      String
+  linkType      LinkType     // Strength/nature of the relationship
+  notesMarkdown String       @db.Text // Explanation of the connection
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  // Relations
+  symbol        MythicSymbol @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+  pillar        BrandPillar  @relation(fields: [pillarId], references: [id], onDelete: Cascade)
+
+  @@unique([symbolId, pillarId])
+  @@index([symbolId])
+  @@index([pillarId])
+  @@index([linkType])
+}
+
+enum LinkType {
+  core       // Central, defining relationship
+  supporting // Reinforcing relationship
+  shadow     // Contrasting or cautionary relationship
+}
