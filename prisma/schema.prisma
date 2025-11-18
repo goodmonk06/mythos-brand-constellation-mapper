@@ -17,15 +17,29 @@ model MythicSymbol {
   name                String              // Display name
   descriptionMarkdown String              @db.Text
   category            SymbolCategory      // Type of symbol
+
+  // Enhanced metadata
+  tags                String[]            @default([])
+  culturalOrigin      String?             // e.g., "Greek", "Norse", "Eastern"
+  symbolicQualities   Json?               // e.g., {"courage": true, "transformation": true}
+  relatedConcepts     String[]            @default([])
+
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
 
   // Relations
-  constellationLinks  ConstellationLink[]
+  constellationLinks     ConstellationLink[]
+  contentPieces          ContentPieceSymbol[]
+  themeSymbols           ThemeSymbol[]
+
+  // Symbol relationships (outgoing)
+  relationshipsFrom      SymbolRelationship[] @relation("FromSymbol")
+  relationshipsTo        SymbolRelationship[] @relation("ToSymbol")
 
   @@unique([communityId, key])
   @@index([communityId])
   @@index([category])
+  @@index([tags])
 }
 
 enum SymbolCategory {
@@ -44,14 +58,23 @@ model BrandPillar {
   key                 String              // URL-friendly key (e.g., "innovation", "community-first")
   name                String              // Display name
   descriptionMarkdown String              @db.Text
+
+  // Enhanced metadata
+  priority            PillarPriority      @default(medium)
+  colorHex            String?             // Brand color associated with this pillar
+  contentGuidelines   String?             @db.Text // Markdown guidelines for content creation
+
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
 
   // Relations
   constellationLinks  ConstellationLink[]
+  contentPieces       ContentPiecePillar[]
+  themePillars        ThemePillar[]
 
   @@unique([communityId, key])
   @@index([communityId])
+  @@index([priority])
 }
 
 // Links between symbols and pillars forming the constellation
@@ -78,4 +101,185 @@ enum LinkType {
   core       // Central, defining relationship
   supporting // Reinforcing relationship
   shadow     // Contrasting or cautionary relationship
+}
+
+enum PillarPriority {
+  high
+  medium
+  low
+}
+
+// Symbol-to-symbol relationships (symbol graph within constellation)
+model SymbolRelationship {
+  id                String              @id @default(cuid())
+  fromSymbolId      String
+  toSymbolId        String
+  relationshipType  SymbolRelationType
+  notesMarkdown     String              @db.Text
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations
+  fromSymbol        MythicSymbol        @relation("FromSymbol", fields: [fromSymbolId], references: [id], onDelete: Cascade)
+  toSymbol          MythicSymbol        @relation("ToSymbol", fields: [toSymbolId], references: [id], onDelete: Cascade)
+
+  @@unique([fromSymbolId, toSymbolId, relationshipType])
+  @@index([fromSymbolId])
+  @@index([toSymbolId])
+  @@index([relationshipType])
+}
+
+enum SymbolRelationType {
+  transforms_into  // Phoenix transforms into Fire
+  opposes          // Fire opposes Water
+  complements      // Sun complements Moon
+  contains         // Ocean contains Fish
+  emerges_from     // Phoenix emerges from Ashes
+}
+
+// Content pieces tagged with constellation elements
+model ContentPiece {
+  id                String              @id @default(cuid())
+  communityId       String
+  title             String
+  descriptionMarkdown String            @db.Text
+  contentType       ContentType
+  url               String?
+  status            ContentStatus       @default(draft)
+  publishedAt       DateTime?
+  metadata          Json?               // Flexible metadata storage
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations
+  symbols           ContentPieceSymbol[]
+  pillars           ContentPiecePillar[]
+
+  @@index([communityId])
+  @@index([contentType])
+  @@index([status])
+  @@index([publishedAt])
+}
+
+enum ContentType {
+  blog_post
+  video
+  image
+  design
+  campaign
+  event
+  social_post
+  other
+}
+
+enum ContentStatus {
+  draft
+  published
+  archived
+}
+
+// Many-to-many: ContentPiece <-> MythicSymbol
+model ContentPieceSymbol {
+  id              String        @id @default(cuid())
+  contentPieceId  String
+  symbolId        String
+  createdAt       DateTime      @default(now())
+
+  contentPiece    ContentPiece  @relation(fields: [contentPieceId], references: [id], onDelete: Cascade)
+  symbol          MythicSymbol  @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+
+  @@unique([contentPieceId, symbolId])
+  @@index([contentPieceId])
+  @@index([symbolId])
+}
+
+// Many-to-many: ContentPiece <-> BrandPillar
+model ContentPiecePillar {
+  id              String        @id @default(cuid())
+  contentPieceId  String
+  pillarId        String
+  createdAt       DateTime      @default(now())
+
+  contentPiece    ContentPiece  @relation(fields: [contentPieceId], references: [id], onDelete: Cascade)
+  pillar          BrandPillar   @relation(fields: [pillarId], references: [id], onDelete: Cascade)
+
+  @@unique([contentPieceId, pillarId])
+  @@index([contentPieceId])
+  @@index([pillarId])
+}
+
+// Constellation themes (higher-order groupings)
+model ConstellationTheme {
+  id                String        @id @default(cuid())
+  communityId       String
+  key               String        // URL-friendly key
+  name              String
+  descriptionMarkdown String      @db.Text
+  colorHex          String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  // Relations
+  symbols           ThemeSymbol[]
+  pillars           ThemePillar[]
+
+  @@unique([communityId, key])
+  @@index([communityId])
+}
+
+// Many-to-many: ConstellationTheme <-> MythicSymbol
+model ThemeSymbol {
+  id        String              @id @default(cuid())
+  themeId   String
+  symbolId  String
+  createdAt DateTime            @default(now())
+
+  theme     ConstellationTheme  @relation(fields: [themeId], references: [id], onDelete: Cascade)
+  symbol    MythicSymbol        @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+
+  @@unique([themeId, symbolId])
+  @@index([themeId])
+  @@index([symbolId])
+}
+
+// Many-to-many: ConstellationTheme <-> BrandPillar
+model ThemePillar {
+  id        String              @id @default(cuid())
+  themeId   String
+  pillarId  String
+  createdAt DateTime            @default(now())
+
+  theme     ConstellationTheme  @relation(fields: [themeId], references: [id], onDelete: Cascade)
+  pillar    BrandPillar         @relation(fields: [pillarId], references: [id], onDelete: Cascade)
+
+  @@unique([themeId, pillarId])
+  @@index([themeId])
+  @@index([pillarId])
+}
+
+// Activity log (audit trail)
+model ActivityLog {
+  id          String      @id @default(cuid())
+  communityId String
+  entityType  String      // e.g., "MythicSymbol", "BrandPillar"
+  entityId    String
+  action      LogAction
+  actorId     String?     // Future: user ID
+  actorName   String?     // For now, just store name/identifier
+  changes     Json?       // Store the actual changes
+  metadata    Json?       // Additional context
+  createdAt   DateTime    @default(now())
+
+  @@index([communityId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+enum LogAction {
+  created
+  updated
+  deleted
+  linked
+  unlinked
 }
